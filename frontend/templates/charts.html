@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="container mt-5 pt-5">
+
+    <h2 class="text-center mb-4">NBA Team Averages</h2>
+
+    <!-- Dropdown -->
+    <div class="row mb-4">
+        <div class="col-md-6 mx-auto">
+            <select id="teamSelect" class="form-control"></select>
+        </div>
+    </div>
+
+    <!-- Chart canvas -->
+    <div class="row">
+        <div class="col">
+            <canvas id="statsChart" height="100"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+let rawData = [];
+let chart = null;
+
+fetch("/api/team_averages")
+    .then(res => res.json())
+    .then(data => {
+        rawData = data;
+        populateDropdown(data);
+        buildChart(data[0]);
+    });
+
+function populateDropdown(data) {
+    const select = document.getElementById("teamSelect");
+
+    data.forEach(team => {
+        let option = document.createElement("option");
+        option.value = team.team;
+        option.textContent = team.team;
+        select.appendChild(option);
+    });
+
+    select.addEventListener("change", e => {
+        const selected = rawData.find(t => t.team === e.target.value);
+        buildChart(selected);
+    });
+}
+
+function buildChart(team) {
+
+    const labels = [
+        "Assists", "Blocks", "Steals",
+        "FG Attempts", "FG Made", "FG %",
+        "3P Attempts", "3P Made", "3P %",
+        "FT Attempts", "FT Made", "FT %",
+        "Reb Def", "Reb Off", "Reb Total",
+        "Fouls", "Turnovers",
+        "+/-", "Team Score", "Opp Score"
+    ];
+
+    const values = [
+        team.assists, team.blocks, team.steals,
+        team.fieldGoalsAttempted, team.fieldGoalsMade, team.fieldGoalsPercentage,
+        team.threePointersAttempted, team.threePointersMade, team.threePointersPercentage,
+        team.freeThrowsAttempted, team.freeThrowsMade, team.freeThrowsPercentage,
+        team.reboundsDefensive, team.reboundsOffensive, team.reboundsTotal,
+        team.foulsPersonal, team.turnovers,
+        team.plusMinusPoints, team.teamScore, team.opponentScore
+    ];
+
+    if(chart) {
+        chart.destroy();
+    }
+
+    chart = new Chart(document.getElementById("statsChart"), {
+        type: "bar",
+        data: {
+            labels: labels,
+            datasets: [{
+                label: team.team,
+                data: values
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+}
+</script>
+
+{% endblock %}

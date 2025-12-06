@@ -1,0 +1,295 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-section portfolio">
+    <div class="container">
+        <div class="text-center">
+            <h2 class="page-section-heading text-secondary mb-0 d-inline-block">All Teams</h2>
+        </div>
+        <div class="divider-custom">
+            <div class="divider-custom-line"></div>
+            <div class="divider-custom-icon"><svg class="svg-inline--fa fa-star fa-w-18" aria-hidden="true" focusable="false" data-prefix="fas" data-icon="star" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><path fill="currentColor" d="M259.3 17.8L194 150.2 47.9 171.5c-26.2 3.8-36.7 36.1-17.7 54.6l105.7 103-25 145.5c-4.5 26.3 23.2 46 46.4 33.7L288 439.6l130.7 68.7c23.2 12.2 50.9-7.4 46.4-33.7l-25-145.5 105.7-103c19-18.5 8.5-50.8-17.7-54.6L382 150.2 316.7 17.8c-11.7-23.6-45.6-23.9-57.4 0z"></path></svg></div>
+            <div class="divider-custom-line"></div>
+        </div>
+        <div id="teamsGrid" class="row gy-4">
+            <!-- divisions & teams go here -->
+        </div>
+    </div>
+</section>
+<!-- Team Detail Modal -->
+<div class="portfolio-modal modal fade" id="teamModal" tabindex="-1" role="dialog"
+     aria-labelledby="teamModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl" role="document">
+        <div class="modal-content position-relative">
+            <!-- Close button (top-right) -->
+            <button class="close" type="button" data-dismiss="modal" aria-label="Close"><span aria-hidden="true"><i class="fas fa-times"></i></span></button>
+
+            <div class="modal-body text-center">
+                <div class="container">
+                    <div class="row justify-content-center">
+                        <!-- Short summary line -->
+                            <p id="teamSummary" class="mb-4 text-muted">
+                                <!-- Filled by JS -->
+                            </p>
+                        <div class="col-lg-8">
+                            <!-- Title -->
+                            <h2 class="portfolio-modal-title text-secondary mb-0"
+                                id="teamModalLabel">
+                                Team Details
+                            </h2>
+
+                            <!-- Icon Divider -->
+                            <div class="divider-custom">
+                                <div class="divider-custom-line"></div>
+                                <div class="divider-custom-icon">
+                                    <svg class="svg-inline--fa fa-star fa-w-18" aria-hidden="true"
+                                         focusable="false" data-prefix="fas" data-icon="star"
+                                         role="img" xmlns="http://www.w3.org/2000/svg"
+                                         viewBox="0 0 576 512">
+                                        <path fill="currentColor"
+                                              d="M259.3 17.8L194 150.2 47.9 171.5c-26.2 3.8-36.7 36.1-17.7 54.6l105.7 103-25 145.5c-4.5 26.3 23.2 46 46.4 33.7L288 439.6l130.7 68.7c23.2 12.2 50.9-7.4 46.4-33.7l-25-145.5 105.7-103c19-18.5 8.5-50.8-17.7-54.6L382 150.2 316.7 17.8c-11.7-23.6-45.6-23.9-57.4 0z">
+                                        </path>
+                                    </svg>
+                                </div>
+                                <div class="divider-custom-line"></div>
+                            </div>
+
+                            <!-- Detailed info -->
+                            <table class="table table-bordered text-center align-middle mt-3">
+                                <tbody id="teamDetails"></tbody>
+                            </table>
+
+                            <!-- Team Averages Stats -->
+                            <h5 class="mt-4 mb-4">Team Averages</h5>
+                            <div id="teamAveragesGrid" class="row g-3"></div>
+
+                            <!-- Roster table -->
+                            <h5 class="mt-4 mb-4">Player Roster</h5>
+                            <div class="table-responsive">
+                                <table class="table table-striped table-sm align-middle">
+                                    <thead>
+                                        <tr>
+                                            <th class="text-start ps-4">Player</th>
+                                            <th>Position</th>
+                                            <th>Jersey</th>
+                                            <th>Age</th>
+                                            <th>Country</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="teamRosterBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    const grid        = document.getElementById("teamsGrid");
+    const teamModalEl = document.getElementById("teamModal");
+    const teamTitle   = document.getElementById("teamModalLabel");
+    const teamDetails = document.getElementById("teamDetails");
+    const teamSummary = document.getElementById("teamSummary");
+    const teamRosterBody= document.getElementById("teamRosterBody");
+    const bsTeamModal = window.bootstrap && bootstrap.Modal
+        ? new bootstrap.Modal(teamModalEl)
+        : null;
+
+    let allTeams = [];
+    let allPlayers = [];
+    let allAverages = [];
+
+    // The order we want columns in
+    const DIVISION_ORDER = [
+        "Atlantic",
+        "Central",
+        "Southeast",
+        "Northwest",
+        "Pacific",
+        "Southwest"
+    ];
+
+    // Handle ranking by Conference
+    function getConferenceFromDivision(division) {
+        const east = ["Atlantic", "Central", "Southeast"];
+        const west = ["Northwest", "Pacific", "Southwest"];
+        if (east.includes(division)) return "Eastern";
+        if (west.includes(division)) return "Western";
+        return "Unknown";
+    }
+    function getConferenceRank(teamName, conference) {
+        const ranked = allAverages
+            .filter(t => getConferenceFromDivision(
+                allTeams.find(tm => tm.TeamName === t.team)?.Division
+            ) === conference)
+            .sort((a, b) => b.teamScore - a.teamScore);
+
+        const index = ranked.findIndex(t => t.team === teamName);
+        return index === -1 ? "N/A" : index + 1;
+    }
+
+    // Load teams, team averages and players
+    Promise.all([
+        fetch("/api/teams").then(r => r.json()),
+        fetch("/api/players").then(r => r.json()),
+        fetch("/api/team_averages").then(r => r.json())
+    ])
+    .then(([teams, players, averages]) => {
+        allTeams   = teams   || [];
+        allPlayers = players || [];
+        allAverages= averages || [];
+
+            // Group by Division
+            const divisions = {};
+            allTeams.forEach(t => {
+                const div = t.Division || "Other";
+                if (!divisions[div]) divisions[div] = [];
+                divisions[div].push(t);
+            });
+
+            // Build column per division
+            DIVISION_ORDER.forEach(divName => {
+                const list = divisions[divName];
+                if (!list || !list.length) return;
+
+                // sort teams by name
+                list.sort((a, b) =>
+                    String(a.TeamName).localeCompare(String(b.TeamName))
+                );
+
+                const col = document.createElement("div");
+                col.className = "col-md-6 col-lg-4";
+
+                col.innerHTML = `
+                    <div class="team-division">
+                        <div class="team-division-title">${divName}</div>
+                        <ul class="team-list">
+                            ${list.map(t => `
+                                <li class="team-item">
+                                    <img class="team-logo"
+                                         src="/static/assets/teams/${t.Abbreviation}.png"
+                                         onerror="this.src='/static/assets/teams/placeholder.png';"
+                                         alt="${t.TeamName}">
+                                    <div>
+                                        <p class="team-name mb-1">
+                                            <a href="#"
+                                               class="team-link"
+                                               data-team-id="${t.TeamId}">
+                                                ${t.TeamName}
+                                            </a>
+                                        </p>
+                                        <div class="team-meta text-muted">
+                                            ${t.City}, ${t.State} ·
+                                            Founded ${t["Year Founded"]}
+                                        </div>
+                                    </div>
+                                </li>
+                            `).join("")}
+                        </ul>
+                    </div>
+                `;
+
+                grid.appendChild(col);
+            });
+
+            // Hook up click → modal
+            grid.querySelectorAll("a.team-link").forEach(a => {
+                a.addEventListener("click", (e) => {
+                    e.preventDefault();
+                    const id = a.getAttribute("data-team-id");
+                    const team = allTeams.find(
+                        t => String(t.TeamId) === String(id)
+                    );
+                    if (team) showTeamDetails(team);
+                });
+            });
+        })
+        .catch(err => {
+            console.error("Error loading teams:", err);
+            grid.innerHTML = `
+                <div class="col-12 text-center text-danger">
+                    Error loading team list.
+                </div>`;
+        });
+
+    // ----- Modal filler -----
+    function showTeamDetails(team) {
+        const name = team.TeamName || "Team Details";
+        teamTitle.textContent = name;
+        let rankEl = "";
+        const conference = getConferenceFromDivision(team.Division);
+
+        teamDetails.innerHTML = `
+
+        `;
+
+         // ---- TEAM AVERAGES LOOKUP ----
+        const avg = allAverages.find(a => a.team === team.TeamName);
+        const grid = document.getElementById("teamAveragesGrid");
+
+
+        if (!avg) {
+            grid.innerHTML = `<div class="text-muted text-center">No team averages available.</div>`;
+            //rankEl.textContent = "";
+        } else {
+            const confRank = getConferenceRank(team.TeamName, conference);
+            rankEl = `#${confRank} in ${conference}`;
+            teamSummary.textContent =
+                `${team.Division} Division · ${rankEl}`;
+            const statCards = [
+                ["Team Score", `${avg.teamScore} pts`],
+                ["Rebounds", avg.reboundsTotal],
+                ["Assists", avg.assists],
+                ["Turnovers", avg.turnovers],
+                ["FG %", Math.round(avg.fieldGoalsPercentage * 100) + "%"],
+                ["3PT %", Math.round(avg.threePointersPercentage * 100) + "%"],
+                ["FT %", Math.round(avg.freeThrowsPercentage * 100) + "%"],
+                ["Opponent Pts", avg.opponentScore]
+            ];
+
+            grid.innerHTML = statCards.map(([label, value]) => `
+                <div class="col-6 col-md-3">
+                    <div class="team-stat-card">
+                        <div class="team-stat-label">${label}</div>
+                        <div class="team-stat-value">${value}</div>
+                    </div>
+                </div>
+            `).join("");
+        }
+
+        // ---- PLAYER ROSTER ----
+        const roster = allPlayers.filter(p =>
+            String(p.TeamId) === String(team.TeamId)
+        );
+
+        if (!roster.length) {
+            teamRosterBody.innerHTML = `
+                <tr>
+                    <td colspan="5" class="text-muted text-center">
+                        No players found for this team.
+                    </td>
+                </tr>`;
+        } else {
+            teamRosterBody.innerHTML = roster.map(p => `
+                <tr>
+                    <td class="text-start ps-4">${p["Player"] || ""}</td>
+                    <td>${p.Position || ""}</td>
+                    <td>${p.Jersey ?? ""}</td>
+                    <td>${p.Age ?? ""}</td>
+                    <td>${p.Country || ""}</td>
+                </tr>
+            `).join("");
+        }
+        if (bsTeamModal) bsTeamModal.show();
+    }
+});
+</script>
+{% endblock %}

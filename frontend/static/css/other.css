@@ -1,0 +1,88 @@
+#brandImage{height:5rem}
+#mainNav{padding: .5rem}
+#mainNav.navbar-shrink {padding: 0}
+
+.player-detail-table .stat-label {
+    font-size: 12px;
+    opacity: 0.85;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.player-detail-table .stat-value {
+    font-size: 16px;
+    margin-top: 2px;
+}
+#playersHeaderRow th > div {
+    min-height: 38px;              /* same height as filter headers */
+    align-items: center !important;
+}
+
+.team-division-title {
+    font-size: 1.2rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.5rem;
+}
+
+.team-list {
+    list-style: none;
+    padding-left: 0;
+    margin-bottom: 0;
+}
+
+.team-item {
+    display: flex;
+    align-items: flex-start;
+    margin-bottom: 0.85rem;
+}
+
+.team-logo {
+    width: 50px;
+    height: 50px;
+    object-fit: contain;
+    margin-right: 0.5rem;
+}
+
+.team-name {
+    font-weight: 600;
+    margin-bottom: 0;
+}
+
+.team-meta {
+    font-size: .75rem;
+}
+
+
+.team-links a {
+    font-size: 0.8rem;
+    margin-right: 0.4rem;
+    text-decoration: none;
+}
+
+.team-links a:hover {
+    text-decoration: underline;
+}
+
+.team-stat-card {
+    background: #4b246e;
+    color: #fff;
+    border-radius: 12px;
+    padding: 14px 10px;
+    text-align: center;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+}
+
+.team-stat-label {
+    font-size: 12px;
+    opacity: 0.85;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.team-stat-value {
+    font-size: 20px;
+    font-weight: 700;
+    margin-top: 2px;
+}
