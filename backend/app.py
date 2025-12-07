@@ -15,12 +15,12 @@ PROJECT_ROOT = os.path.abspath(os.path.join(BASE_DIR, ".."))
 TEMPLATE_DIR = os.path.join(PROJECT_ROOT, "frontend", "templates")
 STATIC_DIR   = os.path.join(PROJECT_ROOT, "frontend", "static")
 
-# Optional: debug prints so you can see paths
+# debug prints to see paths
 print("TEMPLATE_DIR:", TEMPLATE_DIR)
 print("STATIC_DIR:", STATIC_DIR)
 
 # ------------------------------------------------------------------
-# Flask app setup (point to the correct folders)
+# Flask app setup
 # ------------------------------------------------------------------
 
 app = Flask(
@@ -56,10 +56,10 @@ else:
 # Compute Age column
 today = date.today()
 if "DateOfBirth" in df_players.columns:
-    # Convert column to datetime safely
+    # Convert column to datetime
     df_players["DateOfBirth"] = pd.to_datetime(df_players["DateOfBirth"], errors="coerce")
 
-    # Calculate age vectorized
+    # Calculate age
     df_players["Age"] = df_players["DateOfBirth"].apply(
         lambda dob: today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
         if pd.notnull(dob) else None
@@ -122,7 +122,7 @@ TEAM_NAME_MAP = {
     "SuperSonics": "Thunder",
 }
 
-# Boxscore columns for players (lowercase to match df_player_stats)
+# Boxscore columns for players
 PLAYER_BOX_SCORE_COLS = [
     "points", "assists", "blocks", "steals",
     "fieldgoalsattempted", "fieldgoalsmade", "fieldgoalspercentage",
@@ -147,7 +147,7 @@ PERCENTAGE_COLS = [
     "threePointersPercentage",
     "freeThrowsPercentage",
 ]
-# Normalize column names to lower-case without spaces, similar to your old route
+# Normalize column names to lower-case without spaces
 df_player_stats.columns = [c.strip().lower() for c in df_player_stats.columns]
 
 # Build a consistent "player" full-name column
@@ -158,7 +158,6 @@ if "firstname" in df_player_stats.columns and "lastname" in df_player_stats.colu
         + df_player_stats["lastname"].astype(str).str.strip()
     )
 else:
-    # Fallback if the CSV already has a fullname column
     df_player_stats["player"] = df_player_stats.get("fullname", "")
 
 df_team_stats["teamCity"] = df_team_stats["teamCity"].replace(TEAM_CITY_MAP)
@@ -181,7 +180,7 @@ def get_team_averages():
         .reset_index()
     )
 
-    # Fix percentage columns (0–100 scale, 1 decimal place)
+
     averages = _fix_percentage_columns(averages, PERCENTAGE_COLS)
 
     # Reorder columns
@@ -201,7 +200,7 @@ def get_player_averages():
         df_player_stats
         .groupby("player")[cols]
         .mean(numeric_only=True)
-        .round(3)   # keep a few decimals, then adjust percentages
+        .round(3)
         .reset_index()
     )
 
@@ -218,7 +217,7 @@ def get_team_timeseries(team_name: str) -> pd.DataFrame:
     if df_team_stats.empty:
         return pd.DataFrame()
 
-    # Filter to just this team (df_team_stats is already mapped + filtered to MODERN_TEAMS)
+    # Filter to just this team
     df = df_team_stats[df_team_stats["team"] == team_name].copy()
     if df.empty:
         return pd.DataFrame()
@@ -231,7 +230,6 @@ def get_team_timeseries(team_name: str) -> pd.DataFrame:
         df["season"] = pd.to_datetime(df["gameDateTimeEst"], errors="coerce").dt.year
         season_col = "season"
     else:
-        # Fallback: treat everything as one season
         df["season"] = 0
         season_col = "season"
 
@@ -247,14 +245,14 @@ def get_team_timeseries(team_name: str) -> pd.DataFrame:
         .sort_values(season_col)
     )
 
-    # Fix percentage columns (0–100)
+    # Fix percentage columns
     timeseries = _fix_percentage_columns(timeseries, PERCENTAGE_COLS)
 
     # Standardize column name and add team name
     timeseries = timeseries.rename(columns={season_col: "season"})
     timeseries["team"] = team_name
 
-    # Final column order: season, team, then all stats we kept
+
     return timeseries[["season", "team"] + cols]
 
 
@@ -268,6 +266,7 @@ def _fix_percentage_columns(df, percentage_cols):
             df[col] = df[col].apply(lambda x: x * 100 if pd.notnull(x) and x <= 1 else x)
             df[col] = df[col].round(1)
     return df
+
 # ------------------------------------------------------------------
 # Routes that render HTML pages
 # ------------------------------------------------------------------
@@ -308,11 +307,6 @@ def api_players():
     display_df["FullName"] = df_players["FirstName"].astype(str) + " " + df_players["LastName"].astype(str)
     records = display_df.to_dict(orient="records")
     return jsonify(records)
-
-# @app.route("/api/player-names")
-# def api_player_names():
-#     names = sorted(df_players["FullName"].dropna().unique().tolist())
-#     return jsonify(names)
 
 @app.route("/api/teams")
 def api_teams():
