@@ -7,7 +7,6 @@ HOW TO BUILD & RUN THE PROJECT
   
   python -m venv .venv
 
-  source .venv/Scripts/activate (for Windows)
 
 **2.  Install Dependencies**
 
