@@ -2,17 +2,17 @@
 
 {% block content %}
 <section class="page-section portfolio">
-    <div class="container">
+    <div class="container mt-5">
         <div class="text-center">
             <h2 class="page-section-heading text-secondary mb-0 d-inline-block">League Roster</h2>
         </div>
         <div class="divider-custom">
             <div class="divider-custom-line"></div>
-            <div class="divider-custom-icon"><svg class="svg-inline--fa fa-star fa-w-18" aria-hidden="true" focusable="false" data-prefix="fas" data-icon="star" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><path fill="currentColor" d="M259.3 17.8L194 150.2 47.9 171.5c-26.2 3.8-36.7 36.1-17.7 54.6l105.7 103-25 145.5c-4.5 26.3 23.2 46 46.4 33.7L288 439.6l130.7 68.7c23.2 12.2 50.9-7.4 46.4-33.7l-25-145.5 105.7-103c19-18.5 8.5-50.8-17.7-54.6L382 150.2 316.7 17.8c-11.7-23.6-45.6-23.9-57.4 0z"></path></svg></div>
+            <div class="divider-custom-icon"><i class="fas fa-star"></i></div>
             <div class="divider-custom-line"></div>
         </div>
 
-         <div class="d-flex justify-content-between align-items-center mb-3">
+        <div class="d-flex justify-content-between align-items-center mb-3">
             <button id="clearFilters" class="btn btn-outline-warning btn-sm">
                 Clear filters
             </button>
@@ -29,48 +29,45 @@
         </div>
     </div>
 </section>
+
 <!-- Player Detail Modal -->
 <div class="portfolio-modal modal fade" id="playerModal" tabindex="-1" role="dialog"
      aria-labelledby="playerModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-xl" role="document">
         <div class="modal-content position-relative">
-            <!-- Close button (top-right) -->
             <button class="close" type="button" data-dismiss="modal" aria-label="Close"><span aria-hidden="true"><i class="fas fa-times"></i></span></button>
 
             <div class="modal-body text-center">
                 <div class="container">
                     <div class="row justify-content-center">
-                        <!-- Short summary line -->
-                            <p id="playerSummary" class="mb-4 text-muted">
-                                <!-- Filled by JS -->
-                            </p>
-                        <div class="col-lg-8">
-                            <!-- Title -->
-                            <h2 class="portfolio-modal-title text-secondary mb-0"
-                                id="playerModalLabel">
+                        <p id="playerSummary" class="mb-3 text-muted " style="font-size: x-large"></p>
+                        <div class="col-lg-10">
+                            <h2 class="portfolio-modal-title text-secondary mb-0" id="playerModalLabel">
                                 Player Details
                             </h2>
 
-                            <!-- Icon Divider -->
                             <div class="divider-custom">
                                 <div class="divider-custom-line"></div>
-                                <div class="divider-custom-icon">
-                                    <svg class="svg-inline--fa fa-star fa-w-18" aria-hidden="true"
-                                         focusable="false" data-prefix="fas" data-icon="star"
-                                         role="img" xmlns="http://www.w3.org/2000/svg"
-                                         viewBox="0 0 576 512">
-                                        <path fill="currentColor"
-                                              d="M259.3 17.8L194 150.2 47.9 171.5c-26.2 3.8-36.7 36.1-17.7 54.6l105.7 103-25 145.5c-4.5 26.3 23.2 46 46.4 33.7L288 439.6l130.7 68.7c23.2 12.2 50.9-7.4 46.4-33.7l-25-145.5 105.7-103c19-18.5 8.5-50.8-17.7-54.6L382 150.2 316.7 17.8c-11.7-23.6-45.6-23.9-57.4 0z">
-                                        </path>
-                                    </svg>
-                                </div>
+                                <div class="divider-custom-icon"><i class="fas fa-star"></i></div>
                                 <div class="divider-custom-line"></div>
                             </div>
 
-                            <!-- Detailed info -->
-                            <table class="table table-bordered text-center align-middle mt-3 player-detail-table">
-                                <tbody id="playerDetails"></tbody>
-                            </table>
+                            <!-- Static Info Cards -->
+                            <div id="playerDetailCards" class="row g-3 mt-3"></div>
+
+                            <!-- Dynamic NBA Stats Table -->
+                            <div class="mt-4 text-start">
+                                <h4 class="text-secondary mb-2">2024-2025 Statistics</h4>
+                                <div class="table-responsive">
+                                    <table class="table table-bordered table-sm text-center" id="playerDynamicStats">
+                                        <thead>
+                                            <tr id="dynamicStatsHeader"></tr>
+                                        </thead>
+                                        <tbody id="dynamicStatsBody"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+
                         </div>
                     </div>
                 </div>
@@ -85,397 +82,205 @@
 {{ super() }}
 <script>
 document.addEventListener("DOMContentLoaded", () => {
-    const headerRow      = document.getElementById("playersHeaderRow");
-    const body           = document.getElementById("playersBody");
-    const activeFiltersEl= document.getElementById("activeFilters");
-    const clearFiltersBtn= document.getElementById("clearFilters");
+    const headerRow = document.getElementById("playersHeaderRow");
+    const body = document.getElementById("playersBody");
+    const activeFiltersEl = document.getElementById("activeFilters");
+    const clearFiltersBtn = document.getElementById("clearFilters");
 
-    const modalEl        = document.getElementById("playerModal");
-    const modalTitle     = document.getElementById("playerModalLabel");
-    const modalDetails   = document.getElementById("playerDetails");
-    const playerSummary  = document.getElementById("playerSummary");
-    let   bsModal        = null;
+    const modalEl = document.getElementById("playerModal");
+    const modalTitle = document.getElementById("playerModalLabel");
+    const playerSummary = document.getElementById("playerSummary");
+    const playerDetailCards = document.getElementById("playerDetailCards");
+    const dynamicStatsHeader = document.getElementById("dynamicStatsHeader");
+    const dynamicStatsBody = document.getElementById("dynamicStatsBody");
 
-    // 👉 Only show these columns in the table
-    const VISIBLE_COLUMNS = [
-        "Player",
-        "Team",
-        "Age",
-        "Position",
-        "Country"
-    ];
+    let bsModal = bootstrap && bootstrap.Modal ? new bootstrap.Modal(modalEl) : null;
 
-    if (window.bootstrap && bootstrap.Modal) {
-        bsModal = new bootstrap.Modal(modalEl);
-    }
-
+    const VISIBLE_COLUMNS = ["Player", "Team", "Age", "Position", "Country"];
     let allPlayers = [];
-    let columns    = [];
-    let filters    = {}; // { columnName: value }
+    let filters = {};
 
-    // -------- Fetch data --------
-    fetch("/api/players")
-        .then(res => res.json())
-        .then(data => {
-            allPlayers = data || [];
-            if (!allPlayers.length) {
-                body.innerHTML = `
-                    <tr>
-                        <td class="text-center text-muted">No player data available.</td>
-                    </tr>`;
-                return;
+    fetch("/api/players").then(r=>r.json()).then(data=>{
+        allPlayers = data || [];
+        if(!allPlayers.length){
+            body.innerHTML=`<tr><td class="text-center text-muted">No player data available.</td></tr>`;
+            return;
+        }
+        buildHeader();
+        buildBody();
+        updateActiveFilters();
+    }).catch(err=>{
+        console.error(err);
+        body.innerHTML=`<tr><td class="text-center text-danger">Error loading player data.</td></tr>`;
+    });
+
+    function buildHeader(){
+        headerRow.innerHTML="";
+        VISIBLE_COLUMNS.forEach(col=>{
+            const th=document.createElement("th");
+            if(col==="Player"){ th.innerHTML=col; }
+            else{
+                const uniqueValues=Array.from(new Set(allPlayers.map(p=>p[col]).filter(v=>v))).sort();
+                th.innerHTML=`
+                <div class="d-flex justify-content-between align-items-center">
+                    <span>${col}</span>
+                    <div class="btn-group">
+                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">Filter</button>
+                        <ul class="dropdown-menu dropdown-menu-end" data-column="${col}">
+                            <li><button class="dropdown-item" data-value="">All</button></li>
+                            ${uniqueValues.map(v=>`<li><button class="dropdown-item" data-value="${v}">${v}</button></li>`).join("")}
+                        </ul>
+                    </div>
+                </div>`;
             }
-
-            // Only show VISIBLE columns please :)
-            columns = VISIBLE_COLUMNS.filter(c => c in allPlayers[0]);
-            buildHeader();
-            buildBody();
-            updateActiveFilters();
-        })
-        .catch(err => {
-            console.error("Error loading players:", err);
-            body.innerHTML = `
-                <tr>
-                    <td class="text-center text-danger">
-                        Error loading player data.
-                    </td>
-                </tr>`;
+            headerRow.appendChild(th);
         });
 
-    // -------- Build table header with per-column filter dropdowns --------
-    function buildHeader() {
-        headerRow.innerHTML = "";
-
-        columns.forEach(col => {
-            // Collect unique values for this column
-            const uniqueValues = Array.from(
-                new Set(
-                    allPlayers
-                        .map(p => p[col])
-                        .filter(v => v !== null && v !== undefined && v !== "")
-                )
-            ).sort((a, b) => String(a).localeCompare(String(b)));
-
-            const th = document.createElement("th");
-
-            // NO FILTER for Full Name column
-            if (col === "Player") {
-                th.innerHTML = `
-                    <div class="d-flex align-items-center justify-content-between gap-2">
-                        <span>${col}</span>
-                    </div>
-                `;
-            } else {
-                // Normal filter for all other columns
-                const safeUniqueValues = uniqueValues.map(v => ({
-                    raw: v,
-                    html: String(v).replace(/"/g, "&quot;")
-                }));
-
-                th.innerHTML = `
-                    <div class="d-flex align-items-center justify-content-between gap-2">
-                        <span>${col}</span>
-                        <div class="btn-group">
-                            <button type="button"
-                                    class="btn btn-sm btn-outline-secondary dropdown-toggle"
-                                    data-bs-toggle="dropdown"
-                                    aria-expanded="false">
-                                Filter
-                            </button>
-                            <ul class="dropdown-menu dropdown-menu-end" data-column="${col}">
-                                <li>
-                                    <button class="dropdown-item" data-value="">
-                                        All
-                                    </button>
-                                </li>
-                                ${safeUniqueValues.map(v => `
-                                    <li>
-                                        <button class="dropdown-item" data-value="${v.html}">
-                                            ${v.raw}
-                                        </button>
-                                    </li>
-                                `).join("")}
-                            </ul>
-                        </div>
-                    </div>
-                `;
-            }
-
-            headerRow.appendChild(th);
-            });
-
-        // Attach listeners to dropdown menus
-        headerRow.querySelectorAll(".dropdown-menu").forEach(menu => {
-            menu.addEventListener("click", (e) => {
-                const btn = e.target.closest("button.dropdown-item");
-                if (!btn) return;
-
-                const col = menu.getAttribute("data-column");
-                const encodedVal = btn.getAttribute("data-value");
-
-                if (!encodedVal) {
-                    delete filters[col];
-                } else {
-                    filters[col] = btn.textContent.trim();
-                }
-                console.log("FILTERS:", filters);
+        headerRow.querySelectorAll(".dropdown-menu").forEach(menu=>{
+            menu.addEventListener("click", e=>{
+                const btn=e.target.closest("button.dropdown-item");
+                if(!btn) return;
+                const col=menu.getAttribute("data-column");
+                const val=btn.getAttribute("data-value");
+                if(!val) delete filters[col];
+                else filters[col]=val;
                 buildBody();
                 updateActiveFilters();
             });
         });
     }
 
-    // -------- Build table body (filtered rows) --------
-    function buildBody() {
-        body.innerHTML = "";
+    function buildBody(){
+        body.innerHTML="";
+        const filtered=allPlayers.filter(player=>Object.entries(filters).every(([col,val])=>{
+            const cell=player[col];
+            if(cell==null) return false;
+            return String(cell).trim().toLowerCase()===String(val).trim().toLowerCase();
+        }));
 
-        const filtered = allPlayers.filter(player => {
-            return Object.entries(filters).every(([col, val]) => {
-                const cell = player[col];
-
-                if (cell === null || cell === undefined) return false;
-
-                // strict numeric compare
-                if (typeof cell === "number") {
-                    return Number(cell) === Number(val);
-                }
-
-                // strict string compare (case + whitespace safe)
-                return String(cell).trim().toLowerCase() ===
-                       String(val).trim().toLowerCase();
-            });
-        });
-
-        if (!filtered.length) {
-            const tr = document.createElement("tr");
-            const td = document.createElement("td");
-            td.colSpan = columns.length || 1;
-            td.className = "text-center text-muted";
-            td.textContent = "No players match the current filters.";
-            tr.appendChild(td);
-            body.appendChild(tr);
+        if(!filtered.length){
+            body.innerHTML=`<tr><td colspan="${VISIBLE_COLUMNS.length}" class="text-center text-muted">No players match the current filters.</td></tr>`;
             return;
         }
 
-        filtered.forEach(player => {
-            const tr = document.createElement("tr");
-
-            columns.forEach(col => {
-                const td = document.createElement("td");
-                const value = player[col];
-
-                // Make player name clickable to open modal
-                if (col === "Player") {
-                    const a = document.createElement("a");
-                    a.href = "#";
-                    a.textContent = value || "(no name)";
-                    a.addEventListener("click", (e) => {
-                        e.preventDefault();
-                        showPlayerDetails(player);
-                    });
+        filtered.forEach(player=>{
+            const tr=document.createElement("tr");
+            VISIBLE_COLUMNS.forEach(col=>{
+                const td=document.createElement("td");
+                if(col==="Player"){
+                    const a=document.createElement("a");
+                    a.href="#"; a.textContent=player[col];
+                    a.addEventListener("click",e=>{e.preventDefault(); showPlayerDetails(player);});
                     td.appendChild(a);
-                } else {
-                    td.textContent = value;
-                }
-
+                } else td.textContent=player[col];
                 tr.appendChild(td);
             });
-
             body.appendChild(tr);
         });
     }
 
-    // Format DOB, Height and Weight
-    function formatDateLong(dateStr) {
-        if (!dateStr) return "";
-
-        const d = new Date(dateStr);
-        if (isNaN(d)) return dateStr;
-
-        return d.toLocaleDateString("en-US", {
-            year: "numeric",
-            month: "long",
-            day: "numeric"
-        });
-    }
-    function formatHeight(heightStr) {
-        if (!heightStr) return "";
-
-        // "6-8" -> feet=6, inches=8
-        const [feet, inches] = heightStr.split("-").map(Number);
-        if (isNaN(feet) || isNaN(inches)) return heightStr;
-
-        // Convert to meters (1 inch = 2.54 cm)
-        const totalInches = feet * 12 + inches;
-        const meters = (totalInches * 2.54 / 100).toFixed(2);
-
-        return `${feet}'${inches}" (${meters} m)`;
-    }
-
-    function formatWeight(lbs) {
-        if (!lbs) return "";
-        const kg = (lbs * 0.453592).toFixed(0);
-        return `${lbs} lb (${kg} kg)`;
-    }
-
-// -------- Show modal with full player details --------
-function showPlayerDetails(player) {
-    const name    = player["Player"] || "Player details";
-    const team    = player.Team || "";
-    const pos     = player.Position || "";
-    const jersey  = player.Jersey ? "#" + player.Jersey : "";
-
-    // Modal title
-    modalTitle.textContent = name;
-
-    // Build summary line
-    const summaryParts = [];
-    if (team) summaryParts.push(team);
-    if (jersey) summaryParts.push(jersey);
-    if (pos) summaryParts.push(pos);
-
-    if (playerSummary) {
-        playerSummary.textContent = summaryParts.join(" · ");
-    }
-
-    // ---- STATIC INFO TABLE ----
-    const tableDataStatic = [
-        ["Height", formatHeight(player.Height)],
-        ["Weight", formatWeight(player.Weight)],
-        ["Country", player.Country],
-        ["Last Attended", player["Last Attended"]],
-        ["Age", player.Age ? `${player.Age} years` : ""],
-        ["Birthdate", formatDateLong(player["Date of Birth"])],
-    ];
-
-    let html = "<table class='table table-sm mb-3'>";
-    for (let i = 0; i < tableDataStatic.length; i += 3) {
-        html += "<tr>";
-        for (let j = 0; j < 3; j++) {
-            const cell = tableDataStatic[i + j];
-            if (!cell) continue;
-            html += `
-                <td>
-                    <div class="stat-label">${cell[0]}</div>
-                    <div class="stat-value">${cell[1] ?? ""}</div>
-                </td>
-            `;
-        }
-        html += "</tr>";
-    }
-    html += "</table>";
-    modalDetails.innerHTML = html;
-
-    // ---- FETCH PLAYER DYNAMIC BOX SCORE STATS ----
-    fetch(`/api/player-averages/${encodeURIComponent(name)}`)
-        .then(res => {
-            if (!res.ok) throw new Error("Player stats not found");
-            return res.json();
-        })
-        .then(stats => {
-            const tableDataDynamic = [
-                ["Points", stats.points],
-                ["Assists", stats.assists],
-                ["Total Rebounds", stats.reboundstotal],
-                ["Offensive Rebounds", stats.reboundsoffensive],
-                ["Defensive Rebounds", stats.reboundsdefensive],
-                ["FG Made", stats.fieldgoalsmade],
-                ["FG Attempted", stats.fieldgoalsattempted],
-                ["FG%", stats.fieldgoalspercentage != null ? (stats.fieldgoalspercentage * 100).toFixed(1) + "%" : ""],
-                ["3PT Made", stats.threepointersmade],
-                ["3PT Attempted", stats.threepointersattempted],
-                ["3PT%", stats.threepointerspercentage != null ? (stats.threepointerspercentage * 100).toFixed(1) + "%" : ""],
-                ["FT Made", stats.freethrowsmade],
-                ["FT Attempted", stats.freethrowsattempted],
-                ["FT%", stats.freethrowspercentage != null ? (stats.freethrowspercentage * 100).toFixed(1) + "%" : ""],
-                ["Steals", stats.steals],
-                ["Blocks", stats.blocks],
-                ["Turnovers", stats.turnovers],
-                ["Personal Fouls", stats.foulspersonal],
-                ["+/-", stats.plusminuspoints]
-            ];
-
-            html += "<table class='table table-sm'>";
-            for (let i = 0; i < tableDataDynamic.length; i += 3) {
-                html += "<tr>";
-                for (let j = 0; j < 3; j++) {
-                    const cell = tableDataDynamic[i + j];
-                    if (!cell) continue;
-                    html += `
-                        <td>
-                            <div class="stat-label">${cell[0]}</div>
-                            <div class="stat-value">${cell[1] ?? ""}</div>
-                        </td>
-                    `;
-                }
-                html += "</tr>";
-            }
-            html += "</table>";
-
-            modalDetails.innerHTML = html;
-        })
-        .catch(err => {
-            console.error("Error fetching player stats:", err);
-            modalDetails.innerHTML += `
-                <tr>
-                    <td colspan="3" class="text-center text-muted">
-                        No stats available
-                    </td>
-                </tr>
-            `;
-        });
-
-    if (bsModal) bsModal.show();
-}
-
-
-
-
-
-    // -------- Active filters badges --------
-    function updateActiveFilters() {
-        activeFiltersEl.innerHTML = "";
-
-        const entries = Object.entries(filters);
-
-        if (!entries.length) {
-            const span = document.createElement("span");
-            span.className = "text-muted";
-            span.textContent = "No filters applied";
+    function updateActiveFilters(){
+        activeFiltersEl.innerHTML="";
+        const entries=Object.entries(filters);
+        if(!entries.length){
+            const span=document.createElement("span");
+            span.className="text-muted"; span.textContent="No filters applied";
             activeFiltersEl.appendChild(span);
             return;
         }
-
-        entries.forEach(([col, val]) => {
-            const badge = document.createElement("span");
-            badge.className = "badge bg-primary d-flex align-items-center gap-1";
-            badge.innerHTML = `
-                ${col}: ${val}
-                <button type="button"
-                        class="btn-close btn-close-white btn-sm ms-1"
-                        aria-label="Remove"
-                        data-column="${col}">
-                </button>
-            `;
+        entries.forEach(([col,val])=>{
+            const badge=document.createElement("span");
+            badge.className="badge bg-primary d-flex align-items-center gap-1";
+            badge.innerHTML=`${col}: ${val} <button type="button" class="btn-close btn-close-white btn-sm ms-1" data-column="${col}"></button>`;
             activeFiltersEl.appendChild(badge);
         });
-
-        activeFiltersEl.querySelectorAll("button.btn-close").forEach(btn => {
-            btn.addEventListener("click", () => {
-                const col = btn.getAttribute("data-column");
+        activeFiltersEl.querySelectorAll("button.btn-close").forEach(btn=>{
+            btn.addEventListener("click",()=>{
+                const col=btn.getAttribute("data-column");
                 delete filters[col];
-                buildBody();
-                updateActiveFilters();
+                buildBody(); updateActiveFilters();
             });
         });
     }
 
-    // -------- Clear all filters button --------
-    clearFiltersBtn.addEventListener("click", () => {
-        filters = {};
-        buildBody();
-        updateActiveFilters();
-    });
+    clearFiltersBtn.addEventListener("click",()=>{filters={}; buildBody(); updateActiveFilters();});
+
+    function showPlayerDetails(player){
+        modalTitle.textContent=player["Player"]||"Player Details";
+        playerSummary.textContent=[player.Team,player.Jersey? "#"+player.Jersey:"",player.Position].filter(Boolean).join(" · ");
+
+        const staticStats=[
+            ["Height", formatHeight(player.Height)],
+            ["Weight", formatWeight(player.Weight)],
+            ["Country", player.Country],
+            ["Age", player.Age?player.Age+" yrs":""],
+            ["Birthdate", formatDateLong(player["Date of Birth"])],
+            ["Last Attended", player["Last Attended"]]
+        ];
+        playerDetailCards.innerHTML="";
+        staticStats.forEach(([label,value])=>{
+            const card=document.createElement("div");
+            card.className="col-6 col-md-4 p-2";
+            card.innerHTML=`<div class="team-stat-card"><div class="team-stat-label">${label}</div><div class="team-stat-value">${value??""}</div></div>`;
+            playerDetailCards.appendChild(card);
+        });
+
+        fetch("/api/player_averages")
+            .then(res => res.json())
+            .then(allStats => {
+                const stats = allStats.find(
+                    p => p.Player?.toLowerCase() === player["Player"]?.toLowerCase()
+                );
+
+                if (!stats) {
+                    dynamicStatsBody.innerHTML =
+                        "<tr><td colspan='20' class='text-center text-muted'>No stats available</td></tr>";
+                    return;
+                }
+
+                const statColumns = ["PTS","AST","REB","OREB","DREB","FGM","FGA","FG%","3PM","3PA","3P%","FTM","FTA","FT%","STL","BLK","TO","PF","+/-"];
+                const statKeys = [
+                    "points","assists","reboundstotal","reboundsoffensive","reboundsdefensive",
+                    "fieldgoalsmade","fieldgoalsattempted","fieldgoalspercentage",
+                    "threepointersmade","threepointersattempted","threepointerspercentage",
+                    "freethrowsmade","freethrowsattempted","freethrowspercentage",
+                    "steals","blocks","turnovers","foulspersonal","plusminuspoints"
+                ];
+
+                dynamicStatsHeader.innerHTML = "";
+                statColumns.forEach(col => {
+                    const th = document.createElement("th");
+                    th.textContent = col;
+                    dynamicStatsHeader.appendChild(th);
+                });
+
+                dynamicStatsBody.innerHTML = "";
+                const tr = document.createElement("tr");
+
+                statKeys.forEach(key => {
+                    let val = stats[key];
+                    if (key.endsWith("percentage") && val != null)
+                        val = val.toFixed(1) + "%";
+
+                    const td = document.createElement("td");
+                    td.textContent = val ?? "";
+                    tr.appendChild(td);
+                });
+
+                dynamicStatsBody.appendChild(tr);
+            })
+            .catch(err => {
+                console.error(err);
+                dynamicStatsBody.innerHTML =
+                    "<tr><td colspan='20' class='text-center text-muted'>No stats available</td></tr>";
+            });
+        if(bsModal) bsModal.show();
+    }
+
+    function formatDateLong(dateStr){if(!dateStr)return"";const d=new Date(dateStr);if(isNaN(d))return dateStr;return d.toLocaleDateString("en-US",{year:"numeric",month:"long",day:"numeric"});}
+    function formatHeight(str){if(!str)return"";const [f,i]=str.split("-").map(Number);if(isNaN(f)||isNaN(i))return str;return `${f}'${i}" (${((f*12+i)*2.54/100).toFixed(2)} m)`;}
+    function formatWeight(lbs){if(!lbs)return"";return `${lbs} lb (${(lbs*0.453592).toFixed(0)} kg)`;}
+
 });
 </script>
 {% endblock %}

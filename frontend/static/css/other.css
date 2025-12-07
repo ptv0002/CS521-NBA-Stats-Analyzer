@@ -86,3 +86,7 @@
     font-weight: 700;
     margin-top: 2px;
 }
+.team-modal-logo {
+    height: 200px;
+    object-fit: contain;
+}

@@ -2,6 +2,7 @@ import os
 from flask import Flask, render_template, jsonify
 import pandas as pd
 from datetime import datetime, date
+import numpy as np
 
 
 # ------------------------------------------------------------------
@@ -35,14 +36,17 @@ app = Flask(
 
 DATA_DIR = os.path.join(BASE_DIR, "data")
 PLAYERS_FILE = os.path.join(DATA_DIR, "players.csv")
+PLAYER_STATS_FILE = os.path.join(DATA_DIR, "PlayerStatistics.csv")
 TEAMS_FILE = os.path.join(DATA_DIR, "teams.csv")
 TEAM_STATS_FILE = os.path.join(DATA_DIR, "TeamStatistics.csv")
 
 df_players = pd.read_csv(PLAYERS_FILE)
 df_teams = pd.read_csv(TEAMS_FILE)
 df_teams = df_teams.rename(columns={"Id": "TeamId"})
+df_player_stats = pd.read_csv(PLAYER_STATS_FILE)
+df_team_stats = pd.read_csv(TEAM_STATS_FILE)
 
-
+# --------- For teams and players file -----------
 # Create FullName column
 if "FirstName" in df_players.columns and "LastName" in df_players.columns:
     df_players["FullName"] = df_players["FirstName"].astype(str) + " " + df_players["LastName"].astype(str)
@@ -92,121 +96,178 @@ MODERN_TEAMS = [
     "Portland Trail Blazers", "Sacramento Kings", "San Antonio Spurs", "Toronto Raptors",
     "Utah Jazz", "Washington Wizards"
 ]
+# Map old cities to current cities
+TEAM_CITY_MAP = {
+    "St. Louis": "Atlanta",
+    "San Diego": "Los Angeles",
+    "Cincinnati": "Sacramento",
+    "Tri-Cities": "Atlanta",
+    "New Jersey": "Brooklyn",
+    "Minneapolis": "Los Angeles",
+    "Baltimore": "Washington",
+    "Kansas City": "Sacramento",
+    "Vancouver": "Memphis",
+    "Seattle": "Oklahoma City",
+}
+
+TEAM_NAME_MAP = {
+    "Royals": "Kings",
+    "Bullets": "Wizards",
+    "Hawks": "Hawks",
+    "Clippers": "Clippers",
+    "Lakers": "Lakers",
+    "Nets": "Nets",
+    "Warriors": "Warriors",
+    "Grizzlies": "Grizzlies",
+    "SuperSonics": "Thunder",
+}
+
+# Boxscore columns for players (lowercase to match df_player_stats)
+PLAYER_BOX_SCORE_COLS = [
+    "points", "assists", "blocks", "steals",
+    "fieldgoalsattempted", "fieldgoalsmade", "fieldgoalspercentage",
+    "threepointersattempted", "threepointersmade", "threepointerspercentage",
+    "freethrowsattempted", "freethrowsmade", "freethrowspercentage",
+    "reboundsdefensive", "reboundsoffensive", "reboundstotal",
+    "foulspersonal", "turnovers", "plusminuspoints",
+]
+
+STATS_TO_AVERAGE = [
+    "assists", "blocks", "steals",
+    "fieldGoalsAttempted", "fieldGoalsMade", "fieldGoalsPercentage",
+    "threePointersAttempted", "threePointersMade", "threePointersPercentage",
+    "freeThrowsAttempted", "freeThrowsMade", "freeThrowsPercentage",
+    "reboundsDefensive", "reboundsOffensive", "reboundsTotal",
+    "foulsPersonal", "turnovers", "plusMinusPoints",
+    "teamScore", "opponentScore",
+]
+
+PERCENTAGE_COLS = [
+    "fieldGoalsPercentage",
+    "threePointersPercentage",
+    "freeThrowsPercentage",
+]
+# Normalize column names to lower-case without spaces, similar to your old route
+df_player_stats.columns = [c.strip().lower() for c in df_player_stats.columns]
+
+# Build a consistent "player" full-name column
+if "firstname" in df_player_stats.columns and "lastname" in df_player_stats.columns:
+    df_player_stats["player"] = (
+        df_player_stats["firstname"].astype(str).str.strip()
+        + " "
+        + df_player_stats["lastname"].astype(str).str.strip()
+    )
+else:
+    # Fallback if the CSV already has a fullname column
+    df_player_stats["player"] = df_player_stats.get("fullname", "")
+
+df_team_stats["teamCity"] = df_team_stats["teamCity"].replace(TEAM_CITY_MAP)
+df_team_stats["teamName"] = df_team_stats["teamName"].replace(TEAM_NAME_MAP)
+df_team_stats["team"] = df_team_stats["teamCity"] + " " + df_team_stats["teamName"]
+
+# Only keep modern NBA teams
+df_team_stats = df_team_stats[df_team_stats["team"].isin(MODERN_TEAMS)]
 
 def get_team_averages():
-    # Load team games CSV
-    df_team_stats = pd.read_csv(TEAM_STATS_FILE)
-
-    stats_to_average = [
-        "assists", "blocks", "steals",
-        "fieldGoalsAttempted", "fieldGoalsMade", "fieldGoalsPercentage",
-        "threePointersAttempted", "threePointersMade", "threePointersPercentage",
-        "freeThrowsAttempted", "freeThrowsMade", "freeThrowsPercentage",
-        "reboundsDefensive", "reboundsOffensive", "reboundsTotal",
-        "foulsPersonal", "turnovers", "plusMinusPoints",
-        "teamScore", "opponentScore"
-    ]
-
-    # Map old cities to current cities
-    team_city_map = {
-        "St. Louis": "Atlanta",
-        "San Diego": "Los Angeles",
-        "Cincinnati": "Sacramento",
-        "Tri-Cities": "Atlanta",
-        "New Jersey": "Brooklyn",
-        "Minneapolis": "Los Angeles",
-        "Baltimore": "Washington",
-        "Kansas City": "Sacramento",
-        "Vancouver": "Memphis",
-        "Seattle": "Oklahoma City",
-    }
-
-    team_name_map = {
-        "Royals": "Kings",
-        "Bullets": "Wizards",
-        "Hawks": "Hawks",
-        "Clippers": "Clippers",
-        "Lakers": "Lakers",
-        "Nets": "Nets",
-        "Warriors": "Warriors",
-        "Grizzlies": "Grizzlies",
-        "SuperSonics": "Thunder",
-    }
-
-    df_team_stats["teamCity"] = df_team_stats["teamCity"].replace(team_city_map)
-    df_team_stats["teamName"] = df_team_stats["teamName"].replace(team_name_map)
-    df_team_stats["team"] = df_team_stats["teamCity"] + " " + df_team_stats["teamName"]
-
-    # Only keep modern NBA teams
-    df_team_stats = df_team_stats[df_team_stats["team"].isin(MODERN_TEAMS)]
+    # Only keep columns that actually exist
+    cols = [c for c in STATS_TO_AVERAGE if c in df_team_stats.columns]
 
     # Compute averages per team
     averages = (
         df_team_stats
-        .groupby("team")[stats_to_average]
-        .mean(numeric_only=True)
-        .round(3)  # keep more decimals for percentages
-        .reset_index()
-    )
-
-    # Correct percentage columns (0-100 scale)
-    percentage_cols = [
-        "fieldGoalsPercentage",
-        "threePointersPercentage",
-        "freeThrowsPercentage"
-    ]
-    for col in percentage_cols:
-        if col in averages.columns:
-            averages[col] = averages[col].apply(lambda x: x * 100 if x <= 1 else x)
-            averages[col] = averages[col].round(1)
-
-    # Reorder columns
-    column_order = ["team"] + stats_to_average
-    return averages[column_order]
-
-
-def get_player_averages():
-    """
-    Returns a DataFrame with per-player averages from the TeamStatistics CSV.
-    """
-    df_stats = pd.read_csv(TEAM_STATS_FILE)
-
-    # Combine player full name in stats
-    if "firstName" in df_stats.columns and "lastName" in df_stats.columns:
-        df_stats["Player"] = df_stats["firstName"].astype(str) + " " + df_stats["lastName"].astype(str)
-    else:
-        df_stats["Player"] = df_stats.get("FullName", "")
-
-    # Stats to average
-    stats_to_average = [
-        "assists", "blocks", "steals",
-        "fieldGoalsAttempted", "fieldGoalsMade", "fieldGoalsPercentage",
-        "threePointersAttempted", "threePointersMade", "threePointersPercentage",
-        "freeThrowsAttempted", "freeThrowsMade", "freeThrowsPercentage",
-        "reboundsDefensive", "reboundsOffensive", "reboundsTotal",
-        "foulsPersonal", "turnovers", "plusMinusPoints",
-        "teamScore", "opponentScore"
-    ]
-
-    # Group by player
-    averages = (
-        df_stats
-        .groupby("Player")[stats_to_average]
+        .groupby("team")[cols]
         .mean(numeric_only=True)
         .round(3)
         .reset_index()
     )
 
-    # Correct percentages (0–100 scale)
-    percentage_cols = ["fieldGoalsPercentage", "threePointersPercentage", "freeThrowsPercentage"]
-    for col in percentage_cols:
-        if col in averages.columns:
-            averages[col] = averages[col].apply(lambda x: x * 100 if x <= 1 else x)
-            averages[col] = averages[col].round(1)
+    # Fix percentage columns (0–100 scale, 1 decimal place)
+    averages = _fix_percentage_columns(averages, PERCENTAGE_COLS)
+
+    # Reorder columns
+    column_order = ["team"] + cols
+    return averages[column_order]
+
+
+def get_player_averages():
+    """
+    Returns a DataFrame with per-player per-game averages
+    from the preloaded df_player_stats (PlayerStatistics.csv).
+    """
+    # Only keep columns that actually exist in the CSV
+    cols = [c for c in PLAYER_BOX_SCORE_COLS if c in df_player_stats.columns]
+
+    averages = (
+        df_player_stats
+        .groupby("player")[cols]
+        .mean(numeric_only=True)
+        .round(3)   # keep a few decimals, then adjust percentages
+        .reset_index()
+    )
+
+    # Fix percentages
+    averages = _fix_percentage_columns(averages, PERCENTAGE_COLS)
+
+    # Nice column name for frontend
+    averages = averages.rename(columns={"player": "Player"})
 
     return averages
 
 
+def get_team_timeseries(team_name: str) -> pd.DataFrame:
+    if df_team_stats.empty:
+        return pd.DataFrame()
+
+    # Filter to just this team (df_team_stats is already mapped + filtered to MODERN_TEAMS)
+    df = df_team_stats[df_team_stats["team"] == team_name].copy()
+    if df.empty:
+        return pd.DataFrame()
+
+    # Derive season
+    if "season" in df.columns:
+        season_col = "season"
+    elif "gameDateTimeEst" in df.columns:
+        # Parse the datetime and take the calendar year as the season ID
+        df["season"] = pd.to_datetime(df["gameDateTimeEst"], errors="coerce").dt.year
+        season_col = "season"
+    else:
+        # Fallback: treat everything as one season
+        df["season"] = 0
+        season_col = "season"
+
+    # Only average columns that actually exist
+    cols = [c for c in STATS_TO_AVERAGE if c in df.columns]
+
+    timeseries = (
+        df
+        .groupby(season_col)[cols]
+        .mean(numeric_only=True)
+        .round(3)
+        .reset_index()
+        .sort_values(season_col)
+    )
+
+    # Fix percentage columns (0–100)
+    timeseries = _fix_percentage_columns(timeseries, PERCENTAGE_COLS)
+
+    # Standardize column name and add team name
+    timeseries = timeseries.rename(columns={season_col: "season"})
+    timeseries["team"] = team_name
+
+    # Final column order: season, team, then all stats we kept
+    return timeseries[["season", "team"] + cols]
+
+
+
+def _fix_percentage_columns(df, percentage_cols):
+    """
+    Convert 0–1 percentages to 0–100 and round to 1 decimal place.
+    """
+    for col in percentage_cols:
+        if col in df.columns:
+            df[col] = df[col].apply(lambda x: x * 100 if pd.notnull(x) and x <= 1 else x)
+            df[col] = df[col].round(1)
+    return df
 # ------------------------------------------------------------------
 # Routes that render HTML pages
 # ------------------------------------------------------------------
@@ -226,6 +287,10 @@ def players_page():
 def teams_page():
     # This will look for frontend/templates/teams.html
     return render_template("teams.html", title="Team Stats")
+
+@app.route("/charts")
+def charts():
+    return render_template("charts.html")
 # ------------------------------------------------------------------
 # API routes that return JSON
 # ------------------------------------------------------------------
@@ -244,10 +309,10 @@ def api_players():
     records = display_df.to_dict(orient="records")
     return jsonify(records)
 
-@app.route("/api/player-names")
-def api_player_names():
-    names = sorted(df_players["FullName"].dropna().unique().tolist())
-    return jsonify(names)
+# @app.route("/api/player-names")
+# def api_player_names():
+#     names = sorted(df_players["FullName"].dropna().unique().tolist())
+#     return jsonify(names)
 
 @app.route("/api/teams")
 def api_teams():
@@ -257,57 +322,42 @@ def api_teams():
     records = display_df.to_dict(orient="records")
     return jsonify(records)
 
-@app.route("/charts")
-def charts():
-    return render_template("charts.html")
-
 @app.route("/api/team_averages")
 def team_averages():
     display_df = get_team_averages()
+
+    # Merge to get Abbreviation + Division from df_teams
+    merged = display_df.merge(
+        df_teams[["TeamName", "Abbreviation", "Division"]],
+        left_on="team",
+        right_on="TeamName",
+        how="left"
+    )
+
+    merged = merged.rename(columns={
+        "Abbreviation": "abbreviation",
+        "Division": "division"
+    }).drop(columns=["TeamName"])
+
+    records = merged.to_dict(orient="records")
+    return jsonify(records)
+
+@app.route("/api/player_averages")
+def api_player_averages_all():
+    display_df = get_player_averages()
     records = display_df.to_dict(orient="records")
     return jsonify(records)
 
-@app.route("/api/player-averages/<player_name>")
-def api_player_averages(player_name):
-    import pandas as pd
+@app.route("/api/team_timeseries/<team_name>")
+def api_team_timeseries(team_name):
     from urllib.parse import unquote
+    team_name_clean = unquote(team_name)
+    df_ts = get_team_timeseries(team_name_clean)
+    if df_ts.empty:
+        return jsonify([])
 
-    DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
-    df_stats = pd.read_csv(os.path.join(DATA_DIR, "PlayerStatistics.csv"))
-
-    # Normalize column names
-    df_stats.columns = [c.strip().lower() for c in df_stats.columns]
-
-    # Build full name safely
-    df_stats["fullname"] = df_stats["firstname"].astype(str).str.strip() + " " + df_stats["lastname"].astype(str).str.strip()
-
-    # Normalize the incoming player name
-    player_name_clean = unquote(player_name).strip().lower()
-
-    # Lookup
-    player_stats = df_stats[df_stats["fullname"].str.lower() == player_name_clean]
-
-    if player_stats.empty:
-        return jsonify({"error": "Player not found"}), 404
-
-    # Boxscore stats columns
-    boxscore_cols = [
-        "points", "assists", "blocks", "steals",
-        "fieldgoalsattempted", "fieldgoalsmade", "fieldgoalspercentage",
-        "threepointersattempted", "threepointersmade", "threepointerspercentage",
-        "freethrowsattempted", "freethrowsmade", "freethrowspercentage",
-        "reboundsdefensive", "reboundsoffensive", "reboundstotal",
-        "foulspersonal", "turnovers", "plusminuspoints"
-    ]
-
-    # Make sure only existing columns are used
-    boxscore_cols = [c for c in boxscore_cols if c in player_stats.columns]
-
-    per_game = player_stats[boxscore_cols].mean(numeric_only=True).round(1)
-    per_game["FullName"] = player_name
-
-    return jsonify(per_game.to_dict())
-
+    df_ts = df_ts.replace({np.nan: None})
+    return jsonify(df_ts.to_dict(orient="records"))
 
 # ------------------------------------------------------------------
 # Main entry point

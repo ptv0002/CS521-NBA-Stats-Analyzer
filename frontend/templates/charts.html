@@ -2,97 +2,575 @@
 
 {% block content %}
 
-<div class="container mt-5 pt-5">
+<!-- Page-specific styles -->
+<link rel="stylesheet" href="{{ url_for('static', filename='css/charts.css') }}">
 
-    <h2 class="text-center mb-4">NBA Team Averages</h2>
-
-    <!-- Dropdown -->
-    <div class="row mb-4">
-        <div class="col-md-6 mx-auto">
-            <select id="teamSelect" class="form-control"></select>
+<section class="page-section portfolio">
+    <div class="container mt-5">
+        <div class="text-center">
+            <h2 class="page-section-heading text-secondary mb-0 d-inline-block">Game Statistics</h2>
         </div>
-    </div>
-
-    <!-- Chart canvas -->
-    <div class="row">
-        <div class="col">
-            <canvas id="statsChart" height="100"></canvas>
+        <div class="divider-custom">
+            <div class="divider-custom-line"></div>
+            <div class="divider-custom-icon"><i class="fas fa-star"></i></div>
+            <div class="divider-custom-line"></div>
         </div>
-    </div>
-</div>
+        <!-- Tabs row -->
+        <div class="stats-tabs mb-4">
+            <button class="stats-tab active" data-target="tab-stats">
+                Stats Over Time
+            </button>
+            <button class="stats-tab" data-target="tab-compare">
+                Compare Teams
+            </button>
+        </div>
 
-<!-- Chart.js -->
+        <!-- TAB: Stats Over Time -->
+        <div id="tab-stats" class="stat-tab-pane">
+
+            <!-- Grid for Team selection -->
+            <div class="mb-4">
+                <h5 class="mb-2 text-center">Select a Team</h5>
+                <div id="statsGrid"></div>
+            </div>
+
+            <!-- Charts for trends -->
+            <div class="row g-4">
+                <div class="col-12">
+                    <h5 class="mb-2 text-center">
+                        <span class="text-muted">Scoring & Plus/Minus by Season</span>
+                        <span id="teamNameScoring" class="fw-bold"></span>
+                    </h5>
+                    <canvas id="trendScoringChart" height="80"></canvas>
+                </div>
+
+                <div class="col-12">
+                    <h5 class="mb-2 text-center">
+                        <span class="text-muted">Shooting Percentages by Season</span>
+                        <span id="teamNameShooting" class="fw-bold"></span>
+                    </h5>
+                    <canvas id="trendShootingChart" height="80"></canvas>
+                </div>
+
+                <div class="col-12">
+                    <h5 class="mb-2 text-center">
+                        <span class="text-muted">Rebounds, Assists & Turnovers by Season</span>
+                        <span id="teamNameOther" class="fw-bold"></span>
+                    </h5>
+                    <canvas id="trendOtherChart" height="80"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB: Compare Teams -->
+        <div id="tab-compare" class="stat-tab-pane d-none">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div class="d-flex align-items-center gap-2">
+                    <h5 class="mb-0">Select teams to compare</h5>
+                    <small id="compareCount" class="text-muted ms-2">
+                        0 / 5 selected
+                    </small>
+                </div>
+                <button id="clearCompare" class="btn btn-outline-warning btn-sm">
+                    Clear selection
+                </button>
+            </div>
+
+            <!-- Grid of team logo cards (grouped by conference side: West/East) -->
+            <div id="compareGrid" class="mb-4"></div>
+
+            <div class="row">
+                <div class="col">
+                    <h5 class="mb-2 text-center">Average Stats Comparison</h5>
+                    <canvas id="compareChart" height="100"></canvas>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
 
 <script>
-let rawData = [];
-let chart = null;
+Chart.register(ChartDataLabels);
 
-fetch("/api/team_averages")
-    .then(res => res.json())
-    .then(data => {
-        rawData = data;
-        populateDropdown(data);
-        buildChart(data[0]);
+const MAX_COMPARE = 5;
+
+let teamAverages = [];
+let teamsMeta    = [];   // from /api/teams
+let timeSeriesCharts = { scoring: null, shooting: null, other: null };
+let compareChart = null;
+
+document.addEventListener("DOMContentLoaded", () => {
+    // --- Tab behavior ---
+    const tabButtons = document.querySelectorAll(".stats-tab");
+    const tabPanes   = document.querySelectorAll(".stat-tab-pane");
+
+    tabButtons.forEach(btn => {
+        btn.addEventListener("click", () => {
+            tabButtons.forEach(b => b.classList.remove("active"));
+            tabPanes.forEach(p => p.classList.add("d-none"));
+
+            btn.classList.add("active");
+            const targetId = btn.getAttribute("data-target");
+            const pane = document.getElementById(targetId);
+            if (pane) pane.classList.remove("d-none");
+        });
     });
 
-function populateDropdown(data) {
-    const select = document.getElementById("teamSelect");
+    // --- Load team averages and team meta (City, Nickname, Division, Abbreviation) ---
+    Promise.all([
+        fetch("/api/team_averages").then(res => res.json()),
+        fetch("/api/teams").then(res => res.json())
+    ])
+    .then(([averages, teams]) => {
+        teamAverages = averages || [];
+        teamsMeta    = teams    || [];
+        if (!teamAverages.length) return;
 
-    data.forEach(team => {
-        let option = document.createElement("option");
-        option.value = team.team;
-        option.textContent = team.team;
-        select.appendChild(option);
+        populateTeamGrid("statsGrid", teamAverages);    // Stats tab grid
+        populateTeamGrid("compareGrid", teamAverages);  // Compare tab grid
+
+        setTimeout(() => {
+            const firstStatsCard = document.querySelector("#statsGrid .team-card");
+            if (firstStatsCard) {
+                firstStatsCard.classList.add("selected");
+                loadTeamTrends(firstStatsCard.dataset.team);
+            }
+        }, 50);
+
+
+        updateCompareCount();
+        buildCompareChart();
+    })
+    .catch(err => console.error("Error loading team data:", err));
+
+
+    // Clear selection button
+    document.getElementById("clearCompare").addEventListener("click", () => {
+        document
+            .querySelectorAll("#compareGrid .team-card.selected")
+            .forEach(card => card.classList.remove("selected"));
+        updateCompareCount();
+        buildCompareChart();
     });
 
-    select.addEventListener("change", e => {
-        const selected = rawData.find(t => t.team === e.target.value);
-        buildChart(selected);
+    // Handle card click selection (event delegation) with limit
+    document.getElementById("compareGrid").addEventListener("click", e => {
+        const card = e.target.closest(".team-card");
+        if (!card) return;
+
+        const currentlySelected = document.querySelectorAll(
+            "#compareGrid .team-card.selected"
+        ).length;
+
+        if (card.classList.contains("selected")) {
+            card.classList.remove("selected");
+        } else {
+            if (currentlySelected >= MAX_COMPARE) {
+                alert(`You can compare up to ${MAX_COMPARE} teams at once.`);
+                return;
+            }
+            card.classList.add("selected");
+        }
+
+        updateCompareCount();
+        buildCompareChart();
+    });
+
+
+    document.getElementById("statsGrid").addEventListener("click", e => {
+        const card = e.target.closest(".team-card");
+        if (!card) return;
+
+        document
+            .querySelectorAll("#statsGrid .team-card")
+            .forEach(c => c.classList.remove("selected"));
+
+        card.classList.add("selected");
+        loadTeamTrends(card.dataset.team);
+    });
+
+});
+
+// ---------- Helpers ----------
+
+function updateCompareCount() {
+    const el = document.getElementById("compareCount");
+    if (!el) return;
+    const count = document.querySelectorAll("#compareGrid .team-card.selected").length;
+    el.textContent = `${count} / ${MAX_COMPARE} selected`;
+}
+
+// function populateTeamSelect(data) {
+//     const teamSelect = document.getElementById("teamSelect");
+//     teamSelect.innerHTML = "";
+//
+//     data
+//         .slice()
+//         .sort((a, b) => a.team.localeCompare(b.team))
+//         .forEach(team => {
+//             const opt = document.createElement("option");
+//             opt.value = team.team;
+//             opt.textContent = team.team;
+//             teamSelect.appendChild(opt);
+//         });
+// }
+function populateTeamGrid(containerId, data) {
+    const container = document.getElementById(containerId);
+
+    container.innerHTML = `
+        <div class="row g-2">
+            <div class="col-md-6 pr-3">
+                <div class="conf-title text-center mb-1">Western Conference</div>
+                <div class="team-grid" id="${containerId}-west"></div>
+            </div>
+            <div class="col-md-6 pl-3">
+                <div class="conf-title text-center mb-1">Eastern Conference</div>
+                <div class="team-grid" id="${containerId}-east"></div>
+            </div>
+        </div>
+    `;
+
+    const westGrid = document.getElementById(`${containerId}-west`);
+    const eastGrid = document.getElementById(`${containerId}-east`);
+
+    const EAST = ["Atlantic", "Central", "Southeast"];
+    const WEST = ["Northwest", "Pacific", "Southwest"];
+
+    const DIVISION_ORDER = [
+        "Atlantic", "Central", "Southeast",
+        "Northwest", "Pacific", "Southwest"
+    ];
+
+    const merged = data.map(avgRow => {
+        const meta = teamsMeta.find(t => t.TeamName === avgRow.team) || {};
+        return {
+            teamName: avgRow.team,
+            division: (meta.Division || "").trim(),
+            abbreviation: (meta.Abbreviation || "").trim()
+        };
+    });
+
+    const sortFn = (a, b) => {
+        const d1 = DIVISION_ORDER.indexOf(a.division);
+        const d2 = DIVISION_ORDER.indexOf(b.division);
+        return (d1 - d2) || (a.abbreviation || "").localeCompare(b.abbreviation || "");
+    };
+
+    const eastTeams = merged.filter(t => EAST.includes(t.division)).sort(sortFn);
+    const westTeams = merged.filter(t => WEST.includes(t.division)).sort(sortFn);
+
+    function render(list, target) {
+        list.forEach(team => {
+            const logoPath = team.abbreviation
+                ? `/static/assets/teams/${team.abbreviation}.png`
+                : `/static/assets/teams/placeholder.png`;
+
+            const wrapper = document.createElement("div");
+            wrapper.className = "team-card-wrapper";
+
+            wrapper.innerHTML = `
+                <div class="team-card ultra-dense"
+                     data-team="${team.teamName}">
+                    <img src="${logoPath}"
+                         alt="${team.teamName}"
+                         onerror="this.src='/static/assets/teams/placeholder.png';">
+                    <div class="team-abbr">${team.abbreviation}</div>
+                </div>
+            `;
+
+            target.appendChild(wrapper);
+        });
+    }
+
+    render(westTeams, westGrid);
+    render(eastTeams, eastGrid);
+}
+//
+// function populateCompareGrid(data) {
+//     const container = document.getElementById("compareGrid");
+//     container.innerHTML = `
+//         <div class="row g-2">
+//             <div class="col-md-6 pr-3">
+//                 <div class="conf-title text-center mb-1">Western Conference</div>
+//                 <div id="westGrid" class="team-grid"></div>
+//             </div>
+//             <div class="col-md-6 pl-3">
+//                 <div class="conf-title text-center mb-1">Eastern Conference</div>
+//                 <div id="eastGrid" class="team-grid"></div>
+//             </div>
+//         </div>
+//     `;
+//
+//     const westGrid = document.getElementById("westGrid");
+//     const eastGrid = document.getElementById("eastGrid");
+//
+//     const EAST = ["Atlantic", "Central", "Southeast"];
+//     const WEST = ["Northwest", "Pacific", "Southwest"];
+//
+//     const DIVISION_ORDER = [
+//         "Atlantic", "Central", "Southeast",
+//         "Northwest", "Pacific", "Southwest"
+//     ];
+//
+//     // Merge /api/team_averages with /api/teams meta
+//     const merged = data.map(avgRow => {
+//         const meta = teamsMeta.find(t => t.TeamName === avgRow.team) || {};
+//         const division = (meta.Division || "").trim();
+//         const abbr     = (meta.Abbreviation || "").trim();
+//
+//         return {
+//             teamName: avgRow.team,
+//             division,
+//             abbreviation: abbr
+//         };
+//     });
+//
+//     // Helper: sort by division, then abbreviation
+//     const sortFn = (a, b) => {
+//         const d1 = DIVISION_ORDER.indexOf(a.division);
+//         const d2 = DIVISION_ORDER.indexOf(b.division);
+//
+//         const dd1 = d1 === -1 ? 999 : d1;
+//         const dd2 = d2 === -1 ? 999 : d2;
+//
+//         if (dd1 !== dd2) return dd1 - dd2; // division first
+//         return (a.abbreviation || "").localeCompare(b.abbreviation || "");
+//     };
+//
+//     const eastTeams = merged.filter(t => EAST.includes(t.division)).sort(sortFn);
+//     const westTeams = merged.filter(t => WEST.includes(t.division)).sort(sortFn);
+//
+//     // Render helper
+//     function renderList(list, parentGrid) {
+//         list.forEach(team => {
+//             const logoPath = team.abbreviation
+//                 ? `/static/assets/teams/${team.abbreviation}.png`
+//                 : "/static/assets/teams/placeholder.png";
+//
+//             const wrapper = document.createElement("div");
+//             wrapper.className = "team-card-wrapper";
+//
+//             wrapper.innerHTML = `
+//                 <div class="team-card ultra-dense"
+//                      data-team="${team.teamName}">
+//                     <img src="${logoPath}"
+//                          alt="${team.teamName}"
+//                          onerror="this.src='/static/assets/teams/placeholder.png';">
+//                     <div class="team-abbr">${team.abbreviation}</div>
+//                 </div>
+//             `;
+//
+//             parentGrid.appendChild(wrapper);
+//         });
+//     }
+//
+//     renderList(westTeams, westGrid);
+//     renderList(eastTeams, eastGrid);
+// }
+//
+
+
+
+
+// ========== TAB 1: Stats Over Time ==========
+
+function loadTeamTrends(teamName) {
+
+    document.getElementById("teamNameScoring").textContent  = " – " + teamName;
+    document.getElementById("teamNameShooting").textContent = " – " + teamName;
+    document.getElementById("teamNameOther").textContent    = " – " + teamName;
+
+    fetch(`/api/team_timeseries/${encodeURIComponent(teamName)}`)
+        .then(res => res.json())
+        .then(data => {
+            if (!data || !data.length) {
+                destroyTrendCharts();
+                return;
+            }
+            buildTrendCharts(teamName, data);
+        })
+        .catch(err => {
+            console.error("Error loading team timeseries:", err);
+            destroyTrendCharts();
+        });
+}
+
+function destroyTrendCharts() {
+    Object.keys(timeSeriesCharts).forEach(key => {
+        if (timeSeriesCharts[key]) {
+            timeSeriesCharts[key].destroy();
+            timeSeriesCharts[key] = null;
+        }
     });
 }
 
-function buildChart(team) {
+function buildTrendCharts(teamName, series) {
+    destroyTrendCharts();
 
-    const labels = [
-        "Assists", "Blocks", "Steals",
-        "FG Attempts", "FG Made", "FG %",
-        "3P Attempts", "3P Made", "3P %",
-        "FT Attempts", "FT Made", "FT %",
-        "Reb Def", "Reb Off", "Reb Total",
-        "Fouls", "Turnovers",
-        "+/-", "Team Score", "Opp Score"
-    ];
+    const seasons = series.map(row => row.season);
 
-    const values = [
-        team.assists, team.blocks, team.steals,
-        team.fieldGoalsAttempted, team.fieldGoalsMade, team.fieldGoalsPercentage,
-        team.threePointersAttempted, team.threePointersMade, team.threePointersPercentage,
-        team.freeThrowsAttempted, team.freeThrowsMade, team.freeThrowsPercentage,
-        team.reboundsDefensive, team.reboundsOffensive, team.reboundsTotal,
-        team.foulsPersonal, team.turnovers,
-        team.plusMinusPoints, team.teamScore, team.opponentScore
-    ];
+    const scoringData = {
+        teamScore:     series.map(r => r.teamScore),
+        opponentScore: series.map(r => r.opponentScore),
+        plusMinus:     series.map(r => r.plusMinusPoints)
+    };
 
-    if(chart) {
-        chart.destroy();
-    }
+    const shootingData = {
+        fg: series.map(r => r.fieldGoalsPercentage),
+        tp: series.map(r => r.threePointersPercentage),
+        ft: series.map(r => r.freeThrowsPercentage)
+    };
 
-    chart = new Chart(document.getElementById("statsChart"), {
-        type: "bar",
+    const otherData = {
+        rebounds: series.map(r => r.reboundsTotal),
+        assists:  series.map(r => r.assists),
+        turnovers:series.map(r => r.turnovers)
+    };
+
+    const ctxScoring  = document.getElementById("trendScoringChart");
+    const ctxShooting = document.getElementById("trendShootingChart");
+    const ctxOther    = document.getElementById("trendOtherChart");
+
+    timeSeriesCharts.scoring = new Chart(ctxScoring, {
+        type: "line",
         data: {
-            labels: labels,
-            datasets: [{
-                label: team.team,
-                data: values
-            }]
+            labels: seasons,
+            datasets: [
+                { label: "Team Score",     data: scoringData.teamScore,     tension: 0.3 },
+                { label: "Opponent Score", data: scoringData.opponentScore, tension: 0.3 },
+                { label: "+/-",            data: scoringData.plusMinus,     tension: 0.3 }
+            ]
         },
         options: {
             responsive: true,
-            scales: {
-                y: {
-                    beginAtZero: true
+            plugins: {
+                legend: { position: "bottom" },
+                datalabels: { display: false }
+            },
+            scales: { y: { beginAtZero: true } }
+        }
+    });
+
+    timeSeriesCharts.shooting = new Chart(ctxShooting, {
+        type: "line",
+        data: {
+            labels: seasons,
+            datasets: [
+                { label: "FG %",  data: shootingData.fg, tension: 0.3 },
+                { label: "3PT %", data: shootingData.tp, tension: 0.3 },
+                { label: "FT %",  data: shootingData.ft, tension: 0.3 }
+            ]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { position: "bottom" },
+                datalabels: { display: false }
+            },
+            scales: { y: { beginAtZero: true } }
+        }
+    });
+
+    timeSeriesCharts.other = new Chart(ctxOther, {
+        type: "line",
+        data: {
+            labels: seasons,
+            datasets: [
+                { label: "Rebounds",  data: otherData.rebounds,  tension: 0.3 },
+                { label: "Assists",   data: otherData.assists,   tension: 0.3 },
+                { label: "Turnovers", data: otherData.turnovers, tension: 0.3 }
+            ]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { position: "bottom" },
+                datalabels: { display: false }
+            },
+            scales: { y: { beginAtZero: true } }
+        }
+    });
+}
+
+// ========== TAB 2: Compare Teams ==========
+
+function buildCompareChart() {
+    const selectedCards = document.querySelectorAll("#compareGrid .team-card.selected");
+    const selectedTeams = Array.from(selectedCards).map(card => card.dataset.team);
+
+    if (!selectedTeams.length) {
+        if (compareChart) {
+            compareChart.destroy();
+            compareChart = null;
+        }
+        return;
+    }
+
+    const statsLabels = [
+        "Team Score",
+        "Opponent Score",
+        "Rebounds",
+        "Assists",
+        "Turnovers",
+        "FG %",
+        "3PT %",
+        "FT %"
+    ];
+
+    const datasets = selectedTeams.map(teamName => {
+        const t = teamAverages.find(x => x.team === teamName);
+        if (!t) return null;
+        return {
+            label: teamName,
+            data: [
+                t.teamScore,
+                t.opponentScore,
+                t.reboundsTotal,
+                t.assists,
+                t.turnovers,
+                t.fieldGoalsPercentage,
+                t.threePointersPercentage,
+                t.freeThrowsPercentage
+            ]
+        };
+    }).filter(Boolean);
+
+    const ctx = document.getElementById("compareChart");
+    if (compareChart) {
+        compareChart.destroy();
+    }
+
+    compareChart = new Chart(ctx, {
+        type: "bar",
+        data: {
+            labels: statsLabels,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { position: "bottom" },
+                datalabels: {
+                    anchor: "end",
+                    align: "end",
+                    offset: 2,
+                    font: { size: 10 },
+                    formatter: (value) => {
+                        if (value == null || isNaN(value)) return "";
+                        return Number(value).toFixed(1);
+                    }
                 }
+            },
+            scales: {
+                y: { beginAtZero: true }
             }
         }
     });
